@@ -21,7 +21,7 @@ Vagrant.configure(VAGRANTFILE_API_VERSION) do |config|
 
   config.ssh.shell = "bash -c 'BASH_ENV=/etc/profile exec bash'"
 
-  #Provision
+  #Provision machine
   config.vm.provision "shell", inline: <<-SHELL
     sudo touch /var/lib/cloud/instance/locale-check.skip
     sudo apt-key adv --keyserver hkp://pgp.mit.edu:80 --recv-keys 58118E89F3A912897C070ADBF76221572C52609D
