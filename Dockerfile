@@ -26,6 +26,7 @@ RUN mvn -am -pl "modules/swagger-codegen-cli" package
 # This exists at the end of the file to benefit from cached layers when modifying docker-entrypoint.sh.
 COPY docker-entrypoint.sh /usr/local/bin/
 
+# Entrypoint
 ENTRYPOINT ["docker-entrypoint.sh"]
 
 CMD ["help"]
