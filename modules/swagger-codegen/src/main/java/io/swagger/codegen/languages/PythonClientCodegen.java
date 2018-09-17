@@ -138,6 +138,7 @@ public class PythonClientCodegen extends DefaultCodegen implements CodegenConfig
         supportedLibraries.put("urllib3", "urllib3-based client");
         supportedLibraries.put("asyncio", "Asyncio-based client (python 3.5+)");
         supportedLibraries.put("tornado", "tornado-based client");
+        supportedLibraries.put("google", "Google API Client (python 3.5+)");
         CliOption libraryOption = new CliOption(CodegenConstants.LIBRARY, "library template (sub-template) to use");
         libraryOption.setDefault(DEFAULT_LIBRARY);
         cliOptions.add(libraryOption);
@@ -214,6 +215,9 @@ public class PythonClientCodegen extends DefaultCodegen implements CodegenConfig
         } else if ("tornado".equals(getLibrary())) {
             supportingFiles.add(new SupportingFile("tornado/rest.mustache", packageName, "rest.py"));
             additionalProperties.put("tornado", "true");
+        } else if ("google".equals(getLibrary())) {
+            supportingFiles.add(new SupportingFile("google/rest.mustache", packageName, "rest.py"));
+            additionalProperties.put("google", "true");
         } else {
             supportingFiles.add(new SupportingFile("rest.mustache", packageName, "rest.py"));
         }
