@@ -1,0 +1,319 @@
+# coding: utf-8
+
+{{>partial_header}}
+
+from __future__ import absolute_import
+
+import io
+import os
+import json
+import logging
+# python 2 and python 3 compatibility library
+import six
+import six.moves.urllib.parse as parse
+
+import httplib2
+from oauth2client.service_account import ServiceAccountCredentials
+
+logger = logging.getLogger(__name__)
+
+
+class RESTResponse(io.IOBase):
+
+    def __init__(self, resp, data):
+        self.httplib2_response = resp
+        self.status = resp.status
+        self.reason = resp.reason
+        self.data = data
+
+    def getheaders(self):
+        """Returns a dictionary of the response headers."""
+        return self.httplib2_response
+
+    def getheader(self, name, default=None):
+        """Returns a given response header."""
+        return self.httplib2_response[name] if name in self.httplib2_response else default
+
+
+class RESTClientObject(object):
+
+    def __init__(self, configuration):
+        if configuration.credentials_file:
+            if os.path.isfile(configuration.credentials_file):
+                try:
+                    account_credential = ServiceAccountCredentials.from_json_keyfile_name(
+                                configuration.credentials_file,
+                                scopes='https://www.googleapis.com/auth/userinfo.email'
+                    )
+                    if configuration.delegated_user:
+                        self.credentials = account_credential.create_delegated(configuration.delegated_user)
+                    else:
+                        self.credentials = account_credential
+                except:
+                    raise ApiException(500, "Invalid credentials file <{}>".format(configuration.credentials_file))
+            else:
+                raise ApiException(500, "Invalid credentials file <{}>".format(configuration.credentials_file))
+        else:
+            raise ApiException(500, "Need a working credentials file")
+
+    def request(
+                self,
+                method,
+                url,
+                query_params=None,
+                headers=None,
+                body=None,
+                post_params=None,
+                _preload_content=True,
+                _request_timeout=None
+                ):
+        """Perform requests.
+
+            :param method: http request method
+            :param url: http request url
+            :param query_params: query parameters in the url
+            :param headers: http request headers
+            :param body: request json body, for `application/json`
+            :param post_params: request post parameters,
+            `application/x-www-form-urlencoded`
+            and `multipart/form-data`
+            :param _preload_content: if False, the urllib3.HTTPResponse object will
+            be returned without reading/decoding response
+            data. Default is True.
+            :param _request_timeout: timeout setting for this request. If one
+            number provided, it will be total request
+            timeout. It can also be a pair (tuple) of
+            (connection, read) timeouts.
+        """
+        http = httplib2.Http(timeout=_request_timeout)
+        if self.credentials:
+            http = self.credentials.authorize(http)
+        if body:
+            try:
+                if isinstance(body, str):
+                    body = str(body).encode('utf-8')
+                body = parse.urlencode(body)
+            except (UnicodeDecodeError, TypeError):
+                pass
+        endpoint_url = self._build_url(url, query_params)
+        logger.debug("URL endpoint <{}>".format(endpoint_url))
+        response, content = http.request(endpoint_url, method=method, headers=headers, body=body)
+        if content and 'content-type' in response \
+            and 'application/json' in response['content-type']:
+            if type(content) == six.binary_type:
+                content = content.decode('utf-8')
+        logger.debug("Response <{}>".format(response))
+        logger.debug("Content <{}>".format(content))
+        r = RESTResponse(response, content)
+        if not 200 <= response.status <= 299:
+            raise ApiException(http_resp=r)
+        return r
+
+    def _normalize_params(self, params):
+        """Transforms all the values of a given param dict into utf-8 string lists.
+
+        Examples:
+
+        >>> params = {'a': [1, u'example'], 'b': 'example2'}
+        ...
+        >>> normalize_params(params)
+        ...
+        >>> # output:
+        >>> # {
+        >>> #     'a': [
+        >>> #         '1',
+        >>> #         'example'
+        >>> #     ],
+        >>> #     'b': [
+        >>> #         'example2'
+        >>> #     ]
+        >>> # }
+
+        Args:
+        params (dict): Params dict to be normalized.
+
+        Returns:
+        The normalized dict dict.
+        """
+
+        for key, val in six.iteritems(params):
+            if not isinstance(val, (list, tuple)):
+                val = [val]
+            params[key] = [str(k).encode('utf-8') for k in val]
+        return params
+
+    def _build_url(self, url, query_params=None):
+        """Builds an url with the base url and the given paths and params if any.
+
+        Example:
+
+        Given these url, path and params:
+
+        - url:    'http://www.example.com'
+        - query_params: {'first_param': 1, 'second_param': 2}
+
+        The resulting url would be:
+
+        - http://www.example.com/first/path/second/path?first_param=1&second_param=2
+
+        Args:
+        url (str): The base url to perform the http request.
+        query_params: Optional dictionary of http request's query params to append to the url
+
+        Returns:
+        String representing the built url.
+        """
+        if query_params:
+            url_parts = list(parse.urlsplit(url))
+            query = parse.parse_qs(url_parts[3])
+            query.update(self._normalize_params(query_params))
+            url_parts[3] = parse.urlencode(query, doseq=True)
+            url = parse.urlunsplit(url_parts)
+        return url
+
+    def GET(
+            self,
+            url,
+            headers=None,
+            query_params=None,
+            _preload_content=True,
+            _request_timeout=None
+        ):
+        return self.request("GET", url,
+            headers=headers,
+            _preload_content=_preload_content,
+            _request_timeout=_request_timeout,
+            query_params=query_params
+        )
+
+    def HEAD(
+            self,
+            url,
+            headers=None,
+            query_params=None,
+            _preload_content=True,
+            _request_timeout=None
+        ):
+        return self.request("HEAD", url,
+            headers=headers,
+            _preload_content=_preload_content,
+            _request_timeout=_request_timeout,
+            query_params=query_params
+        )
+
+    def OPTIONS(
+            self,
+            url,
+            headers=None,
+            query_params=None,
+            post_params=None,
+            body=None,
+            _preload_content=True,
+            _request_timeout=None
+        ):
+        return self.request("OPTIONS", url,
+            headers=headers,
+            query_params=query_params,
+            post_params=post_params,
+            _preload_content=_preload_content,
+            _request_timeout=_request_timeout,
+            body=body
+        )
+
+    def DELETE(
+            self,
+            url,
+            headers=None,
+            query_params=None,
+            body=None,
+            _preload_content=True,
+            _request_timeout=None
+            ):
+        return self.request("DELETE", url,
+            headers=headers,
+            query_params=query_params,
+            _preload_content=_preload_content,
+            _request_timeout=_request_timeout,
+            body=body
+        )
+
+    def POST(
+            self,
+            url,
+            headers=None,
+            query_params=None,
+            post_params=None,
+            body=None,
+            _preload_content=True,
+            _request_timeout=None
+            ):
+        return self.request("POST", url,
+            headers=headers,
+            query_params=query_params,
+            post_params=post_params,
+            _preload_content=_preload_content,
+            _request_timeout=_request_timeout,
+            body=body
+        )
+
+    def PUT(
+            self,
+            url,
+            headers=None,
+            query_params=None,
+            post_params=None,
+            body=None,
+            _preload_content=True,
+            _request_timeout=None
+        ):
+        return self.request("PUT", url,
+            headers=headers,
+            query_params=query_params,
+            post_params=post_params,
+            _preload_content=_preload_content,
+            _request_timeout=_request_timeout,
+            body=body
+        )
+
+    def PATCH(
+            self,
+            url,
+            headers=None,
+            query_params=None,
+            post_params=None,
+            body=None,
+            _preload_content=True,
+            _request_timeout=None
+        ):
+        return self.request("PATCH", url,
+            headers=headers,
+            query_params=query_params,
+            post_params=post_params,
+            _preload_content=_preload_content,
+            _request_timeout=_request_timeout,
+            body=body
+            )
+
+
+class ApiException(Exception):
+
+    def __init__(self, status=None, reason=None, http_resp=None):
+        if http_resp:
+            self.status = http_resp.status
+            self.reason = http_resp.reason
+            self.body = http_resp.data
+            self.headers = http_resp.getheaders()
+        else:
+            self.status = status
+            self.reason = reason
+            self.body = None
+            self.headers = None
+
+    def __str__(self):
+        """Custom error messages for exception"""
+        error_message = "({0})\nReason: {1}\n".format(self.status, self.reason)
+        if self.headers:
+            error_message += "HTTP response headers: {0}\n".format(self.headers)
+        if self.body:
+            error_message += "HTTP response body: {0}\n".format(self.body)
+        return error_message

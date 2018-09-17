@@ -55,6 +55,10 @@ class Configuration(six.with_metaclass(TypeWithDefault, object)):
         # access token for OAuth
         self.access_token = ""
 {{/isOAuth}}{{/authMethods}}
+{{#google}}
+        self.credentials_file = ""
+        self.delegated_user = ""
+{{/google}}
         # Logging Settings
         self.logger = {}
         self.logger["package_logger"] = logging.getLogger("{{packageName}}")
